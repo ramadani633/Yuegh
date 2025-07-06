@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DHT22 Sensor Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 15px;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 25px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(30px, -30px) rotate(120deg); }
+      66% { transform: translate(-20px, 20px) rotate(240deg); }
+    }
+
+    .header h1 {
+      font-size: 2.8em;
+      font-weight: 700;
+      margin-bottom: 15px;
+      position: relative;
+      z-index: 1;
+      background: linear-gradient(45deg, #fff, #ecf0f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      font-size: 1.2em;
+      opacity: 0.9;
+      font-weight: 400;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stats-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 25px;
+      padding: 40px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+
+    .stat-card {
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, transparent, var(--card-color), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.6s ease;
+    }
+
+    .stat-card:hover::before {
+      transform: translateX(100%);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-card.temperature {
+      --card-color: #e74c3c;
+      border-left: 6px solid #e74c3c;
+    }
+
+    .stat-card.humidity {
+      --card-color: #3498db;
+      border-left: 6px solid #3498db;
+    }
+
+    .stat-card.potensio {
+      --card-color: #f39c12;
+      border-left: 6px solid #f39c12;
+    }
+
+    .stat-icon {
+      font-size: 2.5em;
+      margin-bottom: 15px;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 1.1em;
+      color: #666;
+      font-weight: 500;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 3em;
+      font-weight: 700;
+      margin: 15px 0;
+      background: linear-gradient(45deg, var(--card-color), #2c3e50);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .stat-unit {
+      font-size: 1em;
+      color: #888;
+      font-weight: 400;
+    }
+
+    .chart-container {
+      padding: 40px;
+      background: white;
+      margin: 20px 0;
+      position: relative;
+    }
+
+    .chart-title {
+      text-align: center;
+      font-size: 1.8em;
+      font-weight: 600;
+      margin-bottom: 30px;
+      color: #2c3e50;
+      position: relative;
+      padding-bottom: 15px;
+    }
+
+    .chart-title::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 4px;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      border-radius: 2px;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      background: #fafafa;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    canvas {
+      max-width: 100% !important;
+      height: 400px !important;
+      border-radius: 10px;
+    }
+
+    .status-indicator {
+      position: absolute;
+      top: 25px;
+      right: 25px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px 20px;
+      border-radius: 25px;
+      font-size: 0.9em;
+      font-weight: 500;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #2ecc71;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .data-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: rgba(52, 152, 219, 0.1);
+      border-radius: 10px;
+      border-left: 4px solid #3498db;
+    }
+
+    .data-info span {
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+
+    @media (min-width: 1200px) {
+      .chart-grid {
+        grid-template-columns: 2fr 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        margin: 10px;
+        border-radius: 20px;
+      }
+      
+      .header h1 {
+        font-size: 2.2em;
+      }
+      
+      .stats-container {
+        grid-template-columns: 1fr;
+        padding: 25px;
+        gap: 20px;
+      }
+      
+      .stat-card {
+        padding: 25px;
+      }
+      
+      .stat-value {
+        font-size: 2.5em;
+      }
+      
+      .chart-container {
+        padding: 25px;
+      }
+      
+      canvas {
+        height: 300px !important;
+      }
+    }
+
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .loading-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <div class="container">
+    <div class="header">
+      <h1>🌡️ DHT22 Sensor Monitor</h1>
+      <p>Real-time Temperature, Humidity & Potentiometer Dashboard</p>
+    </div>
+
+    <div class="stats-container">
+      <div class="stat-card temperature">
+        <div class="stat-icon">🌡️</div>
+        <div class="stat-label">Temperature</div>
+        <div class="stat-value" id="currentTemp">--</div>
+        <div class="stat-unit">°C</div>
+      </div>
+      <div class="stat-card humidity">
+        <div class="stat-icon">💧</div>
+        <div class="stat-label">Humidity</div>
+        <div class="stat-value" id="currentHumidity">--</div>
+        <div class="stat-unit">%</div>
+      </div>
+      <div class="stat-card potensio">
+        <div class="stat-icon">🎚️</div>
+        <div class="stat-label">Potentiometer</div>
+        <div class="stat-value" id="currentPotensio">--</div>
+        <div class="stat-unit">%</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-container">
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          <span>Live Data</span>
+        </div>
+        <div class="chart-title">🌡️💧 Temperature & Humidity Trends</div>
+        <div class="data-info">
+          <span>📊 Last 8 readings (40 seconds window)</span>
+          <span id="lastUpdate">Last update: --</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="myChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-container">
+        <div class="chart-title">🎚️ Potentiometer Control</div>
+        <div class="data-info">
+          <span>🔧 Analog input monitoring</span>
+          <span id="potRange">Range: 0-100%</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="potensioChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      databaseURL: "https://coba-8b0d5-default-rtdb.firebaseio.com/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Show loading initially
+    document.getElementById('loadingOverlay').classList.add('show');
+
+    const ctx1 = document.getElementById('myChart').getContext('2d');
+    const ctx2 = document.getElementById('potensioChart').getContext('2d');
+
+    const chart1 = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: '🌡️ Temperature (°C)',
+            data: [],
+            borderColor: '#e74c3c',
+            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: '#e74c3c',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            pointHoverBackgroundColor: '#c0392b',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 3
+          },
+          {
+            label: '💧 Humidity (%)',
+            data: [],
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: '#3498db',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            pointHoverBackgroundColor: '#2980b9',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 750,
+          easing: 'easeInOutQuart'
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              usePointStyle: true,
+              pointStyle: 'circle',
+              padding: 20,
+              font: {
+                size: 14,
+                weight: '500'
+              }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            cornerRadius: 10,
+            displayColors: true,
+            titleFont: {
+              size: 14,
+              weight: '600'
+            },
+            bodyFont: {
+              size: 13
+            },
+            padding: 12
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: '⏰ Time',
+              font: {
+                size: 14,
+                weight: '600'
+              },
+              color: '#2c3e50'
+            },
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)',
+              borderDash: [5, 5]
+            },
+            ticks: {
+              color: '#666',
+              font: {
+                size: 12
+              }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: '📊 Values',
+              font: {
+                size: 14,
+                weight: '600'
+              },
+              color: '#2c3e50'
+            },
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)',
+              borderDash: [5, 5]
+            },
+            ticks: {
+              color: '#666',
+              font: {
+                size: 12
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const chart2 = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: ['Current', 'Remaining'],
+        datasets: [{
+          data: [0, 100],
+          backgroundColor: [
+            '#f39c12',
+            '#ecf0f1'
+          ],
+          borderWidth: 0,
+          cutout: '70%'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 1000,
+          easing: 'easeInOutQuart'
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            cornerRadius: 10,
+            padding: 12
+          }
+        }
+      }
+    });
+
+    // Add text in center of doughnut chart
+    const centerText = {
+      id: 'centerText',
+      beforeDatasetsDraw(chart, args, pluginOptions) {
+        const { ctx, data } = chart;
+        ctx.save();
+        ctx.font = 'bold 24px Inter';
+        ctx.fillStyle = '#f39c12';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const centerX = chart.getDatasetMeta(0).data[0].x;
+        const centerY = chart.getDatasetMeta(0).data[0].y;
+        ctx.fillText(`${data.datasets[0].data[0]}%`, centerX, centerY);
+        ctx.restore();
+      }
+    };
+
+    Chart.register(centerText);
+
+    let counter = 0;
+    let lastUpdateTime = Date.now();
+
+    function updateUI(temp, hum, pot) {
+      document.getElementById('currentTemp').textContent = temp.toFixed(1);
+      document.getElementById('currentHumidity').textContent = hum.toFixed(1);
+      document.getElementById('currentPotensio').textContent = pot.toFixed(1);
+      
+      const now = new Date();
+      document.getElementById('lastUpdate').textContent = 
+        `Last update: ${now.toLocaleTimeString()}`;
+    }
+
+    function updateCharts(temp, hum, pot) {
+      const timeLabel = `${counter * 5}s`;
+      
+      // Update line chart
+      chart1.data.labels.push(timeLabel);
+      chart1.data.datasets[0].data.push(temp);
+      chart1.data.datasets[1].data.push(hum);
+
+      if (chart1.data.labels.length > 8) {
+        chart1.data.labels.shift();
+        chart1.data.datasets[0].data.shift();
+        chart1.data.datasets[1].data.shift();
+      }
+
+      // Update doughnut chart
+      chart2.data.datasets[0].data = [pot, 100 - pot];
+
+      chart1.update('none');
+      chart2.update('none');
+
+      updateUI(temp, hum, pot);
+      counter++;
+      lastUpdateTime = Date.now();
+    }
+
+    function fetchData() {
+      db.ref("DHT22/latest").get().then((snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const suhu = data.suhu ?? 0;
+          const kelembapan = data.kelembapan ?? 0;
+          const potensio = data.potensio ?? 0;
+          
+          updateCharts(suhu, kelembapan, potensio);
+          
+          // Hide loading overlay after first successful fetch
+          document.getElementById('loadingOverlay').classList.remove('show');
+        }
+      }).catch((error) => {
+        console.error("Error fetching data:", error);
+        // Keep trying even if there's an error
+        setTimeout(fetchData, 2000);
+      });
+    }
+
+    // Initial fetch
+    fetchData();
+
+    // Set up interval
+    setInterval(fetchData, 5000);
+
+    // Auto-exit functionality for Kodular
+    let exitTimer;
+    let isExiting = false;
+
+    function autoExit() {
+      if (isExiting) return;
+      isExiting = true;
+      
+      try {
+        if (typeof Android !== 'undefined' && Android.exitApp) {
+          Android.exitApp();
+          return;
+        }
+        
+        if (typeof window.KodularWebViewer !== 'undefined') {
+          window.KodularWebViewer.close();
+          return;
+        }
+        
+        if (window.close) {
+          window.close();
+          return;
+        }
+        
+        if (window.history.length > 1) {
+          window.history.back();
+          return;
+        }
+        
+        window.location.href = 'about:blank';
+        
+      } catch (error) {
+        console.log('Exit method failed:', error);
+        document.body.innerHTML = '<div style="text-align:center; padding:50px; font-family:Arial; color:white;">App will close automatically...</div>';
+        
+        setTimeout(() => {
+          try {
+            window.history.go(-1);
+          } catch (e) {
+            document.body.innerHTML = '';
+          }
+        }, 1000);
+      }
+    }
+
+    // Auto-exit conditions
+    function checkAutoExit() {
+      if (Date.now() - lastUpdateTime > 300000) { // 5 minutes
+        autoExit();
+        return;
+      }
+    }
+
+    setInterval(checkAutoExit, 30000);
+
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        exitTimer = setTimeout(() => {
+          autoExit();
+        }, 30000);
+      } else {
+        if (exitTimer) {
+          clearTimeout(exitTimer);
+          exitTimer = null;
+        }
+      }
+    });
+
+    document.addEventListener('backbutton', function(e) {
+      e.preventDefault();
+      autoExit();
+    }, false);
+  </script>
+</body>
+</html>
