@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor Potensio Real-time</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    
+    .app-bar {
+      background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+      color: white;
+      padding: 16px 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .app-title {
+      font-size: 20px;
+      font-weight: 500;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .app-subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+    
+    .container {
+      padding: 16px;
+      max-width: 100%;
+    }
+    
+    .status-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-online {
+      background: #4caf50;
+    }
+    
+    .status-offline {
+      background: #f44336;
+    }
+    
+    .status-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: #333;
+    }
+    
+    .status-time {
+      font-size: 12px;
+      color: #757575;
+      margin-left: auto;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #2196f3, #21cbf3);
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1976d2;
+      margin-bottom: 4px;
+      font-family: 'Roboto Mono', monospace;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      color: #757575;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .chart-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 16px;
+    }
+    
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    
+    .chart-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: #333;
+    }
+    
+    .chart-container {
+      position: relative;
+      height: 280px;
+      width: 100%;
+    }
+    
+    .floating-value {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(25, 118, 210, 0.9);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      backdrop-filter: blur(10px);
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .info-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 16px;
+    }
+    
+    .info-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .info-text {
+      font-size: 12px;
+      color: #757575;
+      line-height: 1.4;
+    }
+    
+    .refresh-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1976d2, #1565c0);
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+      transition: all 0.3s ease;
+      z-index: 50;
+    }
+    
+    .refresh-button:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(25, 118, 210, 0.5);
+    }
+    
+    .refresh-button:active {
+      transform: scale(0.95);
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .trend-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 12px;
+      margin-top: 4px;
+    }
+    
+    .trend-up {
+      background: #e8f5e8;
+      color: #2e7d32;
+    }
+    
+    .trend-down {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .trend-stable {
+      background: #fff3e0;
+      color: #ef6c00;
+    }
+    
+    /* Responsive untuk layar kecil */
+    @media (max-width: 360px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .stat-value {
+        font-size: 20px;
+      }
+      
+      .chart-container {
+        height: 240px;
+      }
+    }
+    
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #121212;
+        color: #ffffff;
+      }
+      
+      .app-bar {
+        background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+      }
+      
+      .stat-card, .chart-card, .status-card, .info-card {
+        background: #1e1e1e;
+        color: #ffffff;
+      }
+      
+      .status-text {
+        color: #ffffff;
+      }
+      
+      .chart-title {
+        color: #ffffff;
+      }
+      
+      .info-title {
+        color: #ffffff;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-bar">
+    <h1 class="app-title">
+      📊 Monitor Potensio
+    </h1>
+    <p class="app-subtitle">Pemantauan ADC Real-time</p>
+  </div>
+  
+  <div class="container">
+    <div class="status-card">
+      <div class="status-indicator status-online" id="statusDot"></div>
+      <div class="status-text" id="statusText">Terhubung</div>
+      <div class="status-time" id="lastUpdate">Belum pernah diperbarui</div>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="currentValue">0</div>
+        <div class="stat-label">Nilai Saat Ini</div>
+        <div class="trend-indicator trend-stable" id="currentTrend">
+          ➖ Stabil
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="maxValue">0</div>
+        <div class="stat-label">Nilai Maksimum</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="minValue">0</div>
+        <div class="stat-label">Nilai Minimum</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="avgValue">0</div>
+        <div class="stat-label">Rata-rata</div>
+      </div>
+    </div>
+    
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Grafik Nilai Potensio</div>
+      </div>
+      <div class="chart-container">
+        <canvas id="myChart"></canvas>
+        <div class="floating-value" id="floatingValue">0</div>
+      </div>
+    </div>
+    
+    <div class="info-card">
+      <div class="info-title">Informasi</div>
+      <div class="info-text">
+        Data diperbarui setiap 5 detik. Grafik menampilkan 8 titik data terakhir untuk memberikan gambaran tren yang jelas.
+      </div>
+    </div>
+  </div>
+  
+  <button class="refresh-button" onclick="forceRefresh()" title="Refresh Data">
+    🔄
+  </button>
+
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      databaseURL: "coba-8b0d5-default-rtdb.firebaseio.com/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Chart initialization dengan tema Android
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Nilai Potensio',
+          data: [],
+          borderColor: '#1976d2',
+          backgroundColor: 'rgba(25, 118, 210, 0.1)',
+          borderWidth: 3,
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#1976d2',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+          pointHoverBackgroundColor: '#1565c0',
+          pointHoverBorderColor: '#ffffff',
+          pointHoverBorderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 800,
+          easing: 'easeInOutQuart'
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: 'rgba(33, 33, 33, 0.95)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            borderColor: '#1976d2',
+            borderWidth: 1,
+            cornerRadius: 8,
+            displayColors: false,
+            callbacks: {
+              title: function(context) {
+                return 'Waktu: ' + context[0].label;
+              },
+              label: function(context) {
+                return 'Nilai: ' + context.parsed.y;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: {
+              display: true,
+              text: 'Waktu (detik)',
+              font: {
+                size: 12,
+                weight: 'bold'
+              },
+              color: '#757575'
+            },
+            grid: {
+              color: 'rgba(117, 117, 117, 0.2)',
+              borderDash: [2, 2]
+            },
+            ticks: {
+              color: '#757575',
+              font: {
+                size: 11
+              }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Nilai ADC',
+              font: {
+                size: 12,
+                weight: 'bold'
+              },
+              color: '#757575'
+            },
+            grid: {
+              color: 'rgba(117, 117, 117, 0.2)',
+              borderDash: [2, 2]
+            },
+            ticks: {
+              color: '#757575',
+              font: {
+                size: 11
+              }
+            }
+          }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        }
+      }
+    });
+
+    // Variables
+    let counter = 0;
+    let allValues = [];
+    let previousValue = 0;
+    let isOnline = true;
+
+    // Update statistics
+    function updateStats() {
+      if (allValues.length === 0) return;
+      
+      const current = allValues[allValues.length - 1];
+      const max = Math.max(...allValues);
+      const min = Math.min(...allValues);
+      const avg = Math.round(allValues.reduce((a, b) => a + b, 0) / allValues.length);
+      
+      document.getElementById('currentValue').textContent = current;
+      document.getElementById('maxValue').textContent = max;
+      document.getElementById('minValue').textContent = min;
+      document.getElementById('avgValue').textContent = avg;
+      document.getElementById('floatingValue').textContent = current;
+      
+      // Update trend indicator
+      const trendElement = document.getElementById('currentTrend');
+      const diff = current - previousValue;
+      
+      if (diff > 10) {
+        trendElement.className = 'trend-indicator trend-up';
+        trendElement.textContent = '↗️ Naik';
+      } else if (diff < -10) {
+        trendElement.className = 'trend-indicator trend-down';
+        trendElement.textContent = '↘️ Turun';
+      } else {
+        trendElement.className = 'trend-indicator trend-stable';
+        trendElement.textContent = '➖ Stabil';
+      }
+      
+      previousValue = current;
+    }
+
+    // Update chart
+    function updateChart(value) {
+      const timestamp = counter * 5;
+      chart.data.labels.push(timestamp + "s");
+      chart.data.datasets[0].data.push(value);
+      allValues.push(value);
+      counter++;
+
+      // Keep only last 8 data points
+      if (chart.data.labels.length > 8) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      
+      if (allValues.length > 8) {
+        allValues.shift();
+      }
+
+      chart.update('none');
+      updateStats();
+      
+      // Update timestamp
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      document.getElementById('lastUpdate').textContent = `Diperbarui: ${timeString}`;
+    }
+
+    // Update connection status
+    function updateStatus(online) {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      
+      if (online) {
+        statusDot.className = 'status-indicator status-online';
+        statusText.textContent = 'Terhubung';
+        statusText.style.color = '#4caf50';
+      } else {
+        statusDot.className = 'status-indicator status-offline';
+        statusText.textContent = 'Terputus';
+        statusText.style.color = '#f44336';
+      }
+    }
+
+    // Force refresh function
+    function forceRefresh() {
+      const button = document.querySelector('.refresh-button');
+      button.style.transform = 'rotate(360deg)';
+      setTimeout(() => {
+        button.style.transform = 'rotate(0deg)';
+      }, 500);
+      
+      // Fetch data immediately
+      fetchData();
+    }
+
+    // Fetch data from Firebase
+    function fetchData() {
+      db.ref("Potensio/latest").get().then((snapshot) => {
+        const nilai = snapshot.val();
+        if (nilai !== null) {
+          updateChart(nilai);
+          updateStatus(true);
+          isOnline = true;
+        } else {
+          updateStatus(false);
+          isOnline = false;
+        }
+      }).catch((error) => {
+        console.error("Error mengambil data:", error);
+        updateStatus(false);
+        isOnline = false;
+      });
+    }
+
+    // Auto refresh every 5 seconds
+    setInterval(fetchData, 5000);
+
+    // Initial data fetch
+    fetchData();
+
+    // Demo data (uncomment untuk simulasi)
+    /*
+    let demoCounter = 0;
+    setInterval(() => {
+      const demoValue = Math.floor(Math.random() * 800) + 200;
+      updateChart(demoValue);
+      updateStatus(true);
+      demoCounter++;
+    }, 3000);
+    */
+  </script>
+</body>
+</html>
