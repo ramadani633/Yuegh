@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor Potensio - Real-time</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    
+    .app-bar {
+      background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+      color: white;
+      padding: 16px 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .app-bar h1 {
+      font-size: 20px;
+      font-weight: 500;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .app-bar .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+    
+    .container {
+      padding: 16px;
+      max-width: 100%;
+    }
+    
+    .status-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .status-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-online {
+      background: #4caf50;
+    }
+    
+    .status-offline {
+      background: #f44336;
+    }
+    
+    .status-text {
+      font-weight: 500;
+      font-size: 16px;
+    }
+    
+    .last-update {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .stat-card:active {
+      transform: scale(0.98);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1976d2;
+      margin-bottom: 4px;
+      display: block;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+    
+    .chart-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    
+    .chart-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .chart-toggle {
+      display: flex;
+      background: #f0f0f0;
+      border-radius: 20px;
+      padding: 2px;
+    }
+    
+    .toggle-btn {
+      padding: 6px 12px;
+      border: none;
+      background: transparent;
+      border-radius: 18px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .toggle-btn.active {
+      background: #1976d2;
+      color: white;
+    }
+    
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-bottom: 8px;
+    }
+    
+    .chart-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #666;
+      padding-top: 8px;
+      border-top: 1px solid #eee;
+    }
+    
+    .fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+      color: white;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+      transition: all 0.3s ease;
+      z-index: 50;
+    }
+    
+    .fab:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4);
+    }
+    
+    .fab:active {
+      transform: scale(0.95);
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    
+    .loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #1976d2;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+    
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    
+    /* Responsive untuk layar kecil */
+    @media (max-width: 480px) {
+      .container {
+        padding: 12px;
+      }
+      
+      .app-bar {
+        padding: 12px 16px;
+      }
+      
+      .app-bar h1 {
+        font-size: 18px;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .stat-value {
+        font-size: 20px;
+      }
+      
+      .chart-container {
+        height: 250px;
+      }
+      
+      .fab {
+        bottom: 16px;
+        right: 16px;
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+      }
+    }
+    
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #121212;
+        color: #ffffff;
+      }
+      
+      .status-card,
+      .stat-card,
+      .chart-card {
+        background: #1e1e1e;
+        color: #ffffff;
+      }
+      
+      .chart-title {
+        color: #ffffff;
+      }
+      
+      .chart-toggle {
+        background: #333333;
+      }
+      
+      .chart-info {
+        border-top-color: #333333;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-bar">
+    <h1>
+      📊 Monitor Potensio
+    </h1>
+    <div class="subtitle">Pemantauan Nilai ADC Real-time</div>
+  </div>
+
+  <div class="container">
+    <div class="status-card">
+      <div class="status-info">
+        <div class="status-dot status-online" id="statusDot"></div>
+        <div>
+          <div class="status-text" id="statusText">Terhubung</div>
+          <div class="last-update" id="lastUpdate">Terakhir diperbarui: Belum pernah</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-value" id="currentValue">0</span>
+        <div class="stat-label">Nilai Saat Ini</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" id="maxValue">0</span>
+        <div class="stat-label">Nilai Tertinggi</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" id="minValue">0</span>
+        <div class="stat-label">Nilai Terendah</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" id="avgValue">0</span>
+        <div class="stat-label">Rata-rata</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Grafik Waktu Nyata</div>
+        <div class="chart-toggle">
+          <button class="toggle-btn active" id="realtimeBtn">Real-time</button>
+          <button class="toggle-btn" id="historyBtn">Riwayat</button>
+        </div>
+      </div>
+      
+      <div class="chart-container">
+        <canvas id="myChart"></canvas>
+      </div>
+      
+      <div class="chart-info">
+        <span>Interval: 5 detik</span>
+        <span id="dataPoints">Data: 0 titik</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="fab" id="refreshBtn" title="Refresh Data">
+    ⟳
+  </button>
+
+  <script>
+    // Konfigurasi Firebase
+    const firebaseConfig = {
+      databaseURL: "https://coba-8b0d5-default-rtdb.firebaseio.com/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Inisialisasi Chart dengan tema Android
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Nilai Potensio',
+          data: [],
+          borderColor: '#1976d2',
+          backgroundColor: 'rgba(25, 118, 210, 0.1)',
+          borderWidth: 2,
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#1976d2',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: '#1565c0',
+          pointHoverBorderColor: '#ffffff',
+          pointHoverBorderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 750,
+          easing: 'easeInOutQuart'
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: 'rgba(33, 33, 33, 0.95)',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            borderColor: '#1976d2',
+            borderWidth: 1,
+            cornerRadius: 8,
+            displayColors: false,
+            titleFont: {
+              size: 14,
+              weight: 'bold'
+            },
+            bodyFont: {
+              size: 13
+            },
+            callbacks: {
+              title: function(context) {
+                return 'Waktu: ' + context[0].label;
+              },
+              label: function(context) {
+                return 'Nilai: ' + context.parsed.y;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: {
+              display: true,
+              text: 'Waktu',
+              font: {
+                size: 12,
+                weight: '600'
+              },
+              color: '#666'
+            },
+            grid: {
+              display: false
+            },
+            ticks: {
+              color: '#666',
+              font: {
+                size: 11
+              },
+              maxTicksLimit: 6
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Nilai ADC',
+              font: {
+                size: 12,
+                weight: '600'
+              },
+              color: '#666'
+            },
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)',
+              borderDash: [2, 2]
+            },
+            ticks: {
+              color: '#666',
+              font: {
+                size: 11
+              }
+            }
+          }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        }
+      }
+    });
+
+    // Variabel untuk data dan statistik
+    let counter = 0;
+    let allValues = [];
+    let isOnline = false;
+    let isRealtimeMode = true;
+
+    // Fungsi untuk memperbarui statistik
+    function updateStats() {
+      if (allValues.length === 0) {
+        document.getElementById('currentValue').textContent = '0';
+        document.getElementById('maxValue').textContent = '0';
+        document.getElementById('minValue').textContent = '0';
+        document.getElementById('avgValue').textContent = '0';
+        return;
+      }
+      
+      const current = allValues[allValues.length - 1];
+      const max = Math.max(...allValues);
+      const min = Math.min(...allValues);
+      const avg = Math.round(allValues.reduce((a, b) => a + b, 0) / allValues.length);
+      
+      document.getElementById('currentValue').textContent = current.toLocaleString('id-ID');
+      document.getElementById('maxValue').textContent = max.toLocaleString('id-ID');
+      document.getElementById('minValue').textContent = min.toLocaleString('id-ID');
+      document.getElementById('avgValue').textContent = avg.toLocaleString('id-ID');
+      
+      // Update jumlah data points
+      document.getElementById('dataPoints').textContent = `Data: ${allValues.length} titik`;
+    }
+
+    // Fungsi untuk memperbarui chart
+    function updateChart(value) {
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      chart.data.labels.push(timestamp);
+      chart.data.datasets[0].data.push(value);
+      allValues.push(value);
+      counter++;
+
+      // Sliding window untuk mode real-time (maksimal 10 titik)
+      if (isRealtimeMode && chart.data.labels.length > 10) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+        allValues.shift();
+      }
+
+      chart.update('none');
+      updateStats();
+      
+      // Update waktu terakhir diperbarui
+      document.getElementById('lastUpdate').textContent = 
+        `Terakhir diperbarui: ${now.toLocaleTimeString('id-ID')}`;
+    }
+
+    // Fungsi untuk memperbarui status koneksi
+    function updateStatus(online) {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      
+      if (online) {
+        statusDot.className = 'status-dot status-online';
+        statusText.textContent = 'Terhubung';
+        statusText.style.color = '#4caf50';
+        isOnline = true;
+      } else {
+        statusDot.className = 'status-dot status-offline';
+        statusText.textContent = 'Terputus';
+        statusText.style.color = '#f44336';
+        isOnline = false;
+      }
+    }
+
+    // Fungsi untuk mengambil data dari Firebase
+    function fetchData() {
+      db.ref("Potensio/latest").get().then((snapshot) => {
+        const nilai = snapshot.val();
+        if (nilai !== null && nilai !== undefined) {
+          updateChart(nilai);
+          updateStatus(true);
+        } else {
+          updateStatus(false);
+        }
+      }).catch((error) => {
+        console.error("Error mengambil data:", error);
+        updateStatus(false);
+      });
+    }
+
+    // Event listeners untuk toggle mode
+    document.getElementById('realtimeBtn').addEventListener('click', function() {
+      isRealtimeMode = true;
+      this.classList.add('active');
+      document.getElementById('historyBtn').classList.remove('active');
+      
+      // Reset chart untuk mode real-time
+      if (chart.data.labels.length > 10) {
+        chart.data.labels = chart.data.labels.slice(-10);
+        chart.data.datasets[0].data = chart.data.datasets[0].data.slice(-10);
+        allValues = allValues.slice(-10);
+        chart.update();
+        updateStats();
+      }
+    });
+
+    document.getElementById('historyBtn').addEventListener('click', function() {
+      isRealtimeMode = false;
+      this.classList.add('active');
+      document.getElementById('realtimeBtn').classList.remove('active');
+    });
+
+    // Event listener untuk tombol refresh
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+      this.style.transform = 'rotate(360deg)';
+      setTimeout(() => {
+        this.style.transform = 'rotate(0deg)';
+      }, 500);
+      fetchData();
+    });
+
+    // Interval untuk mengambil data setiap 5 detik
+    setInterval(fetchData, 5000);
+
+    // Ambil data pertama kali saat halaman dimuat
+    fetchData();
+
+    // Simulasi data untuk demo (hapus komentar untuk testing)
+    /*
+    setInterval(() => {
+      const demoValue = Math.floor(Math.random() * 800) + 200;
+      updateChart(demoValue);
+      updateStatus(true);
+    }, 3000);
+    */
+  </script>
+</body>
+</html>
